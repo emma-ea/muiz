@@ -10,7 +10,7 @@ interface MusicDao {
     fun getAlphabetizedSongs(): LiveData<List<Song>>
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
-    suspend fun inset(song: Song)
+    suspend fun insert(song: Song)
 
     @Query("SELECT * FROM music_table WHERE song_album_id LIKE :albumID LIMIT 10")
     suspend fun doesAlbumIDExist(albumID: String): List<Song>
