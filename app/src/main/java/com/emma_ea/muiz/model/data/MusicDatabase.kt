@@ -9,7 +9,7 @@ import com.emma_ea.muiz.model.Song
 @Database(entities = [Song::class], version = 1, exportSchema = false)
 abstract class MusicDatabase : RoomDatabase() {
 
-    abstract fun musicDAO : MusicDao
+    abstract fun musicDAO() : MusicDao
 
     companion object {
         private var database: MusicDatabase? = null
