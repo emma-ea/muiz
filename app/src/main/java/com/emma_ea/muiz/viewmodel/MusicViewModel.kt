@@ -10,12 +10,13 @@ import com.emma_ea.muiz.repository.MusicRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
+// we use AndroidViewModel so we can request application context
 class MusicViewModel(app: Application) : AndroidViewModel(app) {
     private val repository: MusicRepository
-    private val allSongs: LiveData<List<Song>>
+    val allSongs: LiveData<List<Song>>
 
     init {
-        val musicDao = MusicDatabase.getDatabase(app).musicDAO()
+        val musicDao = MusicDatabase.getDatabase(app, viewModelScope).musicDAO()
         repository = MusicRepository(musicDao)
         allSongs = repository.allSongs
     }
