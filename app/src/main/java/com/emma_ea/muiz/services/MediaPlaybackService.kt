@@ -6,17 +6,23 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
-import android.media.AudioManager.ACTION_AUDIO_BECOMING_NOISY
+import android.media.AudioManager
+import android.media.AudioManager.*
 import android.media.MediaPlayer
 import android.media.MediaPlayer.*
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.service.media.MediaBrowserService
 import android.support.v4.media.MediaBrowserCompat
 import android.support.v4.media.session.MediaSessionCompat
+import android.support.v4.media.session.PlaybackStateCompat
 import android.text.TextUtils
 import android.view.KeyEvent
+import android.widget.Toast
+import androidx.annotation.RequiresApi
 import androidx.media.MediaBrowserServiceCompat
 import com.emma_ea.muiz.R
 import com.emma_ea.muiz.model.Song
@@ -25,6 +31,7 @@ import com.google.gson.reflect.TypeToken
 import java.io.IOException
 import java.lang.IllegalArgumentException
 import java.lang.IllegalStateException
+import java.lang.NullPointerException
 
 class MediaPlaybackService : MediaBrowserServiceCompat(), OnErrorListener {
 
@@ -64,7 +71,18 @@ class MediaPlaybackService : MediaBrowserServiceCompat(), OnErrorListener {
         result.sendResult(null)
     }
 
+    private val afChangeListener: OnAudioFocusChangeListener = OnAudioFocusChangeListener { focusChange ->
+        when (focusChange) {
+            AUDIOFOCUS_LOSS, AUDIOFOCUS_LOSS_TRANSIENT -> mMediaSessionCallback.onPause()
+            AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
+                if (mMediaPlayer != null) mMediaPlayer?.setVolume(0.3f, 0.3f)
+            }
+            AUDIOFOCUS_GAIN -> mMediaPlayer?.setVolume(1.0f, 1.0f)
+        }
+    }
+
     private val mMediaSessionCallback = object : MediaSessionCompat.Callback() {
+        @RequiresApi(Build.VERSION_CODES.O)
         override fun onMediaButtonEvent(mediaButtonEvent: Intent?): Boolean {
             val ke = mediaButtonEvent?.getParcelableExtra<KeyEvent>(Intent.EXTRA_KEY_EVENT)
             if (ke != null && mMediaPlayer != null) {
@@ -114,6 +132,114 @@ class MediaPlaybackService : MediaBrowserServiceCompat(), OnErrorListener {
             }
 
         }
+
+        @RequiresApi(Build.VERSION_CODES.O)
+        override fun onPlay() {
+            super.onPlay()
+            if (currentlyPlayingSong != null) {
+                val audioManager = applicationContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                // request audio focus for playback
+                audioFocusRequest = AudioFocusRequest.Builder(AUDIOFOCUS_GAIN).run {
+                    setAudioAttributes(AudioAttributes.Builder().run {
+                        setOnAudioFocusChangeListener(afChangeListener)
+                        setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                        build()
+                    })
+                    build()
+                }
+
+                val result = audioManager.requestAudioFocus(audioFocusRequest)
+                if (result == AUDIOFOCUS_REQUEST_GRANTED) {
+                    // start service
+                    startService(Intent(applicationContext, MediaBrowserService::class.java))
+                    // set the session active
+                    mMediaSessionCompat.isActive = true
+                    showNotification(true)
+                    try {
+                        mMediaPlayer!!.start()
+                        val playbackPosition = mMediaPlayer!!.currentPosition.toLong()
+                        val playbackDuration = mMediaPlayer!!.duration
+                        val bundle = Bundle()
+                        bundle.putInt("duration", playbackDuration)
+                        setMediaPlaybackState(PlaybackStateCompat.STATE_PLAYING, playbackPosition, 1F, bundle)
+                        mMediaPlayer!!.setOnCompletionListener {
+                            setMediaPlaybackState(
+                                PlaybackStateCompat.STATE_SKIPPING_TO_NEXT,
+                                0,
+                                0F,
+                                null
+                            )
+                        }
+                    } catch (e: IllegalStateException) {
+                        onError(mMediaPlayer, MEDIA_ERROR_UNKNOWN, MEDIA_ERROR_IO)
+                    } catch (e: NullPointerException) {
+                        onError(mMediaPlayer, MEDIA_ERROR_UNKNOWN, MEDIA_ERROR_IO)
+                    }
+                }
+
+            }
+        }
+
+        override fun onPause() {
+            super.onPause()
+            if (mMediaPlayer != null && mMediaPlayer!!.isPlaying) {
+                mMediaPlayer!!.pause()
+                val playbackPosition = mMediaPlayer!!.currentPosition.toLong()
+                val playbackDuration = mMediaPlayer!!.duration
+                val bundle = Bundle()
+                bundle.putInt("duration", playbackDuration)
+                setMediaPlaybackState(PlaybackStateCompat.STATE_PAUSED, playbackPosition, 0f, bundle)
+                showNotification(false)
+            }
+        }
+
+        override fun onSkipToNext() {
+            super.onSkipToNext()
+            setMediaPlaybackState(PlaybackStateCompat.STATE_SKIPPING_TO_NEXT, 0, 0f, null)
+        }
+
+        override fun onSkipToPrevious() {
+            super.onSkipToPrevious()
+            // currentPosition returns the playback in milliseconds
+            // if the media player is more than 5 seconds into song then restart song, otherwise skip back to previous song
+            if (mMediaPlayer != null && mMediaPlayer!!.currentPosition > 5000) onSeekTo(0)
+            else setMediaPlaybackState(PlaybackStateCompat.STATE_SKIPPING_TO_PREVIOUS, 0, 0f, null)
+        }
+
+        @RequiresApi(Build.VERSION_CODES.O)
+        override fun onStop() {
+            super.onStop()
+            if (mMediaPlayer != null) {
+                mMediaPlayer!!.stop()
+                mMediaPlayer!!.release()
+                mMediaPlayer = null
+                currentlyPlayingSong = null
+                stopForeground(true)
+                try {
+                    val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                    audioManager.abandonAudioFocusRequest(audioFocusRequest)
+                } catch (ignore: UninitializedPropertyAccessException) { }
+            }
+            setMediaPlaybackState(PlaybackStateCompat.STATE_STOPPED, 0L, 0f, null)
+            stopSelf()
+        }
+
+        override fun onSeekTo(pos: Long) {
+            super.onSeekTo(pos)
+            mMediaPlayer?.let {
+                if (it.isPlaying) {
+                    it.pause()
+                    it.seekTo(pos.toInt())
+                    it.start()
+                    val playbackPosition = it.currentPosition.toLong()
+                    setMediaPlaybackState(PlaybackStateCompat.STATE_PAUSED, playbackPosition, 0f, null)
+                } else {
+                    val playbackPosition =it.currentPosition.toLong()
+                    setMediaPlaybackState(PlaybackStateCompat.STATE_PAUSED, playbackPosition, 0f, null)
+                }
+            }
+        }
+
     }
 
     private val mNoisyReceiver = object : BroadcastReceiver() {
@@ -123,7 +249,21 @@ class MediaPlaybackService : MediaBrowserServiceCompat(), OnErrorListener {
     }
 
     override fun onError(p0: MediaPlayer?, p1: Int, p2: Int): Boolean {
-        TODO("Not yet implemented")
+        mMediaPlayer?.reset()
+        mMediaPlayer = null
+        setMediaPlaybackState(PlaybackStateCompat.STATE_STOPPED, 0L, 0F, null)
+        currentlyPlayingSong = null
+        stopForeground(true)
+        Toast.makeText(application, getString(R.string.error), Toast.LENGTH_LONG).show()
+        return true
+    }
+
+    private fun setMediaPlaybackState(state: Int, position: Long, playbackSpeed: Float, bundle: Bundle?) {
+        val playbackState = PlaybackStateCompat.Builder()
+            .setState(state, position, playbackSpeed)
+            .setExtras(bundle)
+            .build()
+        mMediaSessionCompat.setPlaybackState(playbackState)
     }
 
     fun setCurrentMetadata() {
