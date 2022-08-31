@@ -313,10 +313,21 @@ class MediaPlaybackService : MediaBrowserServiceCompat(), OnErrorListener {
     }
 
     private fun calculateSampleSize(options: BitmapFactory.Options): Int {
-        return 0
+        val reqWidth = 100
+        val reqHeight = 100
+        val (height: Int, width: Int) = options.run { outHeight to outWidth }
+        var inSampleSize = 1
+        if (height > reqHeight || width > reqWidth) {
+            val halfHeight: Int = height / 2
+            val halfWidth: Int = width / 2
+            // calculate the largest inSampleSize value that is a power of 2 and keeps both
+            // height and width larger than the requested height and width
+            while (halfHeight / inSampleSize >= reqHeight && halfWidth / inSampleSize >= reqWidth) {
+                inSampleSize *= 2
+            }
+        }
+        return inSampleSize
     }
-
-
 
     fun showNotification(isPlaying: Boolean) {
         TODO("handle notification")
