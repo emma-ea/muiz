@@ -1,9 +1,8 @@
 package com.emma_ea.muiz.services
 
-import android.content.BroadcastReceiver
-import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
+import android.content.*
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
@@ -17,6 +16,7 @@ import android.os.Handler
 import android.os.Looper
 import android.service.media.MediaBrowserService
 import android.support.v4.media.MediaBrowserCompat
+import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
 import android.text.TextUtils
@@ -28,6 +28,9 @@ import com.emma_ea.muiz.R
 import com.emma_ea.muiz.model.Song
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import java.io.File
+import java.io.FileInputStream
+import java.io.FileNotFoundException
 import java.io.IOException
 import java.lang.IllegalArgumentException
 import java.lang.IllegalStateException
@@ -280,9 +283,39 @@ class MediaPlaybackService : MediaBrowserServiceCompat(), OnErrorListener {
         mMediaSessionCompat.setPlaybackState(playbackState)
     }
 
-    fun setCurrentMetadata() {
-        TODO("metadata associated with currently playing song")
+    private fun setCurrentMetadata() {
+        val metadata = MediaMetadataCompat.Builder().apply {
+            putString(MediaMetadataCompat.METADATA_KEY_TITLE, currentlyPlayingSong?.title)
+            putString(MediaMetadataCompat.METADATA_KEY_ARTIST, currentlyPlayingSong?.artist)
+            putString(MediaMetadataCompat.METADATA_KEY_ALBUM, currentlyPlayingSong?.album)
+            putBitmap(
+                MediaMetadataCompat.METADATA_KEY_ALBUM_ART,
+                getArtwork(currentlyPlayingSong?.albumID) ?:
+                BitmapFactory.decodeResource(application.resources, R.drawable.ic_launcher_foreground))
+        }.build()
+        mMediaSessionCompat.setMetadata(metadata)
     }
+
+    private fun getArtwork(albumArtwork: String?) : Bitmap? {
+        try {
+            return BitmapFactory.Options().run {
+                inJustDecodeBounds = true
+                val cw = ContextWrapper(applicationContext)
+                val directory = cw.getDir("albumArt", Context.MODE_PRIVATE)
+                val f = File(directory, "$albumArtwork.jpg")
+                BitmapFactory.decodeStream(FileInputStream(f))
+                inSampleSize = calculateSampleSize(this)
+                inJustDecodeBounds = false
+                BitmapFactory.decodeStream(FileInputStream(f))
+            }
+        } catch (ignore: FileNotFoundException) {}
+        return null
+    }
+
+    private fun calculateSampleSize(options: BitmapFactory.Options): Int {
+        return 0
+    }
+
 
 
     fun showNotification(isPlaying: Boolean) {
