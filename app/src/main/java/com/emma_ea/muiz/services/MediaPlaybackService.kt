@@ -1,5 +1,6 @@
 package com.emma_ea.muiz.services
 
+import android.app.PendingIntent
 import android.content.*
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -23,6 +24,7 @@ import android.text.TextUtils
 import android.view.KeyEvent
 import android.widget.Toast
 import androidx.annotation.RequiresApi
+import androidx.core.app.NotificationCompat
 import androidx.media.MediaBrowserServiceCompat
 import com.emma_ea.muiz.R
 import com.emma_ea.muiz.model.Song
@@ -330,7 +332,75 @@ class MediaPlaybackService : MediaBrowserServiceCompat(), OnErrorListener {
     }
 
     fun showNotification(isPlaying: Boolean) {
-        TODO("handle notification")
+        val playPauseIntent = if (isPlaying)
+            Intent(applicationContext, MediaPlaybackService::class.java).setAction("ACTION_PAUSE")
+        else
+            Intent(applicationContext, MediaPlaybackService::class.java).setAction("ACTION_PLAY")
+
+        val nextIntent = Intent(applicationContext, MediaPlaybackService::class.java).setAction("ACTION_NEXT")
+        val prevIntent = Intent(applicationContext, MediaPlaybackService::class.java).setAction("ACTION_PREVIOUS")
+
+        val intent = packageManager.getLaunchIntentForPackage(packageName)
+            ?.setPackage(null)
+            ?.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
+
+        val activityIntent = PendingIntent.getActivity(applicationContext, 0, intent, PendingIntent.FLAG_IMMUTABLE)
+
+        val builder = NotificationCompat.Builder(applicationContext, channelID).apply {
+            // get session's metadata
+            val controller = mMediaSessionCompat.controller
+            val mediaMetadata = controller.metadata
+            // previous button
+            addAction(
+                NotificationCompat.Action(
+                    R.drawable.ic_back,
+                    getString(R.string.play_prev),
+                    PendingIntent.getService(applicationContext, 0, prevIntent, PendingIntent.FLAG_IMMUTABLE)
+                )
+            )
+            // play/pause button
+            val playOrPause = if (isPlaying) R.drawable.ic_play
+            else R.drawable.ic_pause
+
+            addAction(
+                NotificationCompat.Action(
+                    playOrPause,
+                    getString(R.string.play_pause),
+                    PendingIntent.getService(applicationContext, 0, playPauseIntent, PendingIntent.FLAG_IMMUTABLE)
+                )
+            )
+
+            // next button
+            addAction(
+                NotificationCompat.Action(
+                    R.drawable.ic_next,
+                    getString(R.string.play_next),
+                    PendingIntent.getService(applicationContext, 0, nextIntent, PendingIntent.FLAG_IMMUTABLE)
+                )
+            )
+
+            setStyle(androidx.media.app.NotificationCompat.MediaStyle()
+                .setShowActionsInCompactView(0, 1, 2)
+                .setMediaSession(mMediaSessionCompat.sessionToken))
+
+            val smallIcon = if (isPlaying) R.drawable.ic_play
+            else R.drawable.ic_pause
+
+            setSmallIcon(smallIcon)
+            setContentIntent(activityIntent)
+
+            // add metadata for currently playing track
+            setContentTitle(mediaMetadata.getString(MediaMetadataCompat.METADATA_KEY_TITLE))
+            setContentText(mediaMetadata.getString(MediaMetadataCompat.METADATA_KEY_ARTIST))
+            setLargeIcon(mediaMetadata.getBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART))
+
+            // make transport controls visible on lockscreen
+            setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            priority = NotificationCompat.PRIORITY_DEFAULT
+        }
+
+        // display notification, place service in foreground
+        startForeground(1, builder.build())
     }
 
 }
