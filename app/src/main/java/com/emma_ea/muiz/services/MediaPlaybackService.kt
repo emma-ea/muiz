@@ -52,6 +52,7 @@ class MediaPlaybackService : MediaBrowserServiceCompat(), OnErrorListener {
         }
         val filter = IntentFilter(ACTION_AUDIO_BECOMING_NOISY)
         registerReceiver(mNoisyReceiver, filter)
+        playbackPositionChecker.run()
     }
 
     override fun onGetRoot(
@@ -69,6 +70,19 @@ class MediaPlaybackService : MediaBrowserServiceCompat(), OnErrorListener {
         result: Result<MutableList<MediaBrowserCompat.MediaItem>>
     ) {
         result.sendResult(null)
+    }
+
+    private var playbackPositionChecker = object : Runnable {
+        override fun run() {
+            try {
+                if (mMediaPlayer != null && mMediaPlayer!!.isPlaying) {
+                    val playbackPosition = mMediaPlayer!!.currentPosition.toLong()
+                    setMediaPlaybackState(PlaybackStateCompat.STATE_PLAYING, playbackPosition, 1f, null)
+                }
+            } finally {
+                handler.postDelayed(this, 1000L)
+            }
+        }
     }
 
     private val afChangeListener: OnAudioFocusChangeListener = OnAudioFocusChangeListener { focusChange ->
