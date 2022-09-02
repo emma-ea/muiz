@@ -4,6 +4,8 @@ import android.content.ComponentName
 import android.content.SharedPreferences
 import android.os.Bundle
 import android.support.v4.media.MediaBrowserCompat
+import android.support.v4.media.session.MediaControllerCompat
+import android.support.v4.media.session.PlaybackStateCompat
 import android.support.v4.media.session.PlaybackStateCompat.STATE_STOPPED
 import android.view.Menu
 import androidx.activity.viewModels
@@ -36,6 +38,30 @@ class MainActivity : AppCompatActivity() {
     private lateinit var mediaBrowser: MediaBrowserCompat
     private lateinit var sharedPreferences: SharedPreferences
 
+    private val connectionCallback = object : MediaBrowserCompat.ConnectionCallback() {
+        override fun onConnected() {
+            super.onConnected()
+            mediaBrowser.sessionToken.also { token ->
+                val mediaControllerCompat = MediaControllerCompat(this@MainActivity, token)
+                mediaControllerCompat.registerCallback(controllerCallback)
+                MediaControllerCompat.setMediaController(this@MainActivity, mediaControllerCompat)
+            }
+            MediaControllerCompat.getMediaController(this@MainActivity)
+                .registerCallback(controllerCallback)
+        }
+    }
+
+    private val controllerCallback = object : MediaControllerCompat.Callback() {
+        override fun onPlaybackStateChanged(state: PlaybackStateCompat?) {
+            super.onPlaybackStateChanged(state)
+            val mediaController = MediaControllerCompat.getMediaController(this@MainActivity)
+            if (state == null) return
+            when(state.state) {
+                // playback states
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -62,6 +88,7 @@ class MainActivity : AppCompatActivity() {
         navView.setupWithNavController(navController)
 
         sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this)
+        // setup interaction with media browser service
         mediaBrowser = MediaBrowserCompat(
             this,
             ComponentName(this, MediaPlaybackService::class.java),
