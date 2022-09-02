@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.support.v4.media.MediaBrowserCompat
 import android.support.v4.media.session.MediaControllerCompat
 import android.support.v4.media.session.PlaybackStateCompat
+import android.support.v4.media.session.PlaybackStateCompat.STATE_PLAYING
 import android.support.v4.media.session.PlaybackStateCompat.STATE_STOPPED
 import android.view.Menu
 import androidx.activity.viewModels
@@ -57,7 +58,16 @@ class MainActivity : AppCompatActivity() {
             val mediaController = MediaControllerCompat.getMediaController(this@MainActivity)
             if (state == null) return
             when(state.state) {
-                // playback states
+                STATE_PLAYING -> {
+                    pbState = state.state
+                    val playbackPosition = state.position.toInt()
+                    if (state.extras != null) {
+                        val playbackDuration = state.extras!!.getInt("duration")
+                        playbackViewModel.currentPlaybackDuration.value = playbackDuration
+                    }
+                    playbackViewModel.currentPlaybackPosition.value = playbackPosition
+                    playbackViewModel.isPlaying.value = true
+                }
             }
         }
     }
