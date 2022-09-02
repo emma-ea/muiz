@@ -25,6 +25,7 @@ import android.view.KeyEvent
 import android.widget.Toast
 import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.media.MediaBrowserServiceCompat
 import com.emma_ea.muiz.R
 import com.emma_ea.muiz.model.Song
@@ -75,6 +76,30 @@ class MediaPlaybackService : MediaBrowserServiceCompat(), OnErrorListener {
         result: Result<MutableList<MediaBrowserCompat.MediaItem>>
     ) {
         result.sendResult(null)
+    }
+
+    // detect incoming playback from notification intents
+    @RequiresApi(Build.VERSION_CODES.O)
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        intent?.action.let {
+            when (it) {
+                "ACTION_PLAY" -> mMediaSessionCallback.onPlay()
+                "ACTION_PAUSE" -> mMediaSessionCallback.onPause()
+                "ACTION_NEXT" -> mMediaSessionCallback.onSkipToNext()
+                "ACTION_PREVIOUS" -> mMediaSessionCallback.onSkipToPrevious()
+            }
+        }
+        return super.onStartCommand(intent, flags, startId)
+    }
+
+    @RequiresApi(Build.VERSION_CODES.O)
+    override fun onDestroy() {
+        super.onDestroy()
+        handler.removeCallbacks(playbackPositionChecker)
+        unregisterReceiver(mNoisyReceiver)
+        mMediaSessionCallback.onStop()
+        mMediaSessionCompat.release()
+        NotificationManagerCompat.from(this).cancel(1)
     }
 
     private var playbackPositionChecker = object : Runnable {
@@ -345,7 +370,7 @@ class MediaPlaybackService : MediaBrowserServiceCompat(), OnErrorListener {
             ?.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
 
         val activityIntent = PendingIntent.getActivity(applicationContext, 0, intent, PendingIntent.FLAG_IMMUTABLE)
-
+        // channelID: handle notifications app is responsible for
         val builder = NotificationCompat.Builder(applicationContext, channelID).apply {
             // get session's metadata
             val controller = mMediaSessionCompat.controller
@@ -379,6 +404,7 @@ class MediaPlaybackService : MediaBrowserServiceCompat(), OnErrorListener {
                 )
             )
 
+            // mediastyle: adjust notification to album art color scheme
             setStyle(androidx.media.app.NotificationCompat.MediaStyle()
                 .setShowActionsInCompactView(0, 1, 2)
                 .setMediaSession(mMediaSessionCompat.sessionToken))
