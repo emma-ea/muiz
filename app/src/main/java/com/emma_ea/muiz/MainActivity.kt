@@ -6,8 +6,7 @@ import android.os.Bundle
 import android.support.v4.media.MediaBrowserCompat
 import android.support.v4.media.session.MediaControllerCompat
 import android.support.v4.media.session.PlaybackStateCompat
-import android.support.v4.media.session.PlaybackStateCompat.STATE_PLAYING
-import android.support.v4.media.session.PlaybackStateCompat.STATE_STOPPED
+import android.support.v4.media.session.PlaybackStateCompat.*
 import android.view.Menu
 import androidx.activity.viewModels
 import com.google.android.material.snackbar.Snackbar
@@ -68,6 +67,27 @@ class MainActivity : AppCompatActivity() {
                     playbackViewModel.currentPlaybackPosition.value = playbackPosition
                     playbackViewModel.isPlaying.value = true
                 }
+                // TODO: handle states -> stopped, skipped to next, prev
+                STATE_PAUSED -> {
+                    pbState = state.state
+                    val playbackPosition = state.position.toInt()
+                    if (state.extras != null) {
+                        val playbackDuration = state.extras!!.getInt("duration")
+                        playbackViewModel.currentPlaybackDuration.value = playbackDuration
+                    }
+                    playbackViewModel.currentPlaybackPosition.value = playbackPosition
+                    playbackViewModel.isPlaying.value = false
+                }
+                STATE_STOPPED -> {
+                    pbState = state.state
+                    playbackViewModel.isPlaying.value = false
+                    playbackViewModel.currentPlayQueue.value = mutableListOf()
+                    playbackViewModel.currentlyPlayingQueueID.value = 0
+                    playbackViewModel.currentlyPlayingSong.value = null
+                    playbackViewModel.currentPlaybackDuration.value = 0
+                    playbackViewModel.currentPlaybackPosition.value = 0
+                }
+
             }
         }
     }
