@@ -1,7 +1,12 @@
 package com.emma_ea.muiz
 
+import android.content.ComponentName
+import android.content.SharedPreferences
 import android.os.Bundle
+import android.support.v4.media.MediaBrowserCompat
+import android.support.v4.media.session.PlaybackStateCompat.STATE_STOPPED
 import android.view.Menu
+import androidx.activity.viewModels
 import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.navigation.NavigationView
 import androidx.navigation.findNavController
@@ -11,12 +16,25 @@ import androidx.navigation.ui.setupActionBarWithNavController
 import androidx.navigation.ui.setupWithNavController
 import androidx.drawerlayout.widget.DrawerLayout
 import androidx.appcompat.app.AppCompatActivity
+import androidx.preference.PreferenceManager
 import com.emma_ea.muiz.databinding.ActivityMainBinding
+import com.emma_ea.muiz.model.Song
+import com.emma_ea.muiz.services.MediaPlaybackService
+import com.emma_ea.muiz.viewmodel.PlaybackViewModel
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var appBarConfiguration: AppBarConfiguration
     private lateinit var binding: ActivityMainBinding
+
+    private val channelID = "music"
+    private var completeLibrary = listOf<Song>()
+    private var currentlyPlayingQueueID = 0
+    private var pbState = STATE_STOPPED
+    private val playbackViewModel: PlaybackViewModel by viewModels()
+    var playQueue = mutableListOf<Pair<Int, Song>>()
+    private lateinit var mediaBrowser: MediaBrowserCompat
+    private lateinit var sharedPreferences: SharedPreferences
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -42,6 +60,15 @@ class MainActivity : AppCompatActivity() {
         )
         setupActionBarWithNavController(navController, appBarConfiguration)
         navView.setupWithNavController(navController)
+
+        sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this)
+        mediaBrowser = MediaBrowserCompat(
+            this,
+            ComponentName(this, MediaPlaybackService::class.java),
+            connectionCallback,
+            intent.extras
+        )
+        mediaBrowser.connect()
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
