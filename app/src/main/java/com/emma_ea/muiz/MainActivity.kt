@@ -18,11 +18,13 @@ import androidx.navigation.ui.setupActionBarWithNavController
 import androidx.navigation.ui.setupWithNavController
 import androidx.drawerlayout.widget.DrawerLayout
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import androidx.preference.PreferenceManager
 import com.emma_ea.muiz.databinding.ActivityMainBinding
 import com.emma_ea.muiz.model.Song
 import com.emma_ea.muiz.services.MediaPlaybackService
 import com.emma_ea.muiz.viewmodel.PlaybackViewModel
+import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
 
@@ -87,7 +89,41 @@ class MainActivity : AppCompatActivity() {
                     playbackViewModel.currentPlaybackDuration.value = 0
                     playbackViewModel.currentPlaybackPosition.value = 0
                 }
-
+                STATE_SKIPPING_TO_NEXT -> {
+                    val repeatSettings = sharedPreferences.getInt("repeat", REPEAT_MODE_NONE)
+                    when {
+                        repeatSettings == REPEAT_MODE_ONE -> { }
+                        playQueue.isNotEmpty() && playQueue[playQueue.size - 1].first != currentlyPlayingQueueID -> {
+                            val index = playQueue.indexOfFirst {
+                                it.first == currentlyPlayingQueueID
+                            }
+                            currentlyPlayingQueueID = playQueue[index + 1].first
+                        }
+                        // if we get to the end of the queue, check whether we should start over
+                        repeatSettings == REPEAT_MODE_ALL -> currentlyPlayingQueueID = playQueue[0].first
+                        else -> {
+                            mediaController.transportControls.stop()
+                            return
+                        }
+                    }
+                    lifecycleScope.launch {
+                        updateCurrentlyPlaying()
+                        if (pbState == STATE_PLAYING) play()
+                    }
+                }
+                STATE_SKIPPING_TO_PREVIOUS -> {
+                    if (playQueue.isNotEmpty() && currentlyPlayingQueueID != playQueue[0].first) {
+                        val index = playQueue.indexOfFirst {
+                            it.first == currentlyPlayingQueueID
+                        }
+                        currentlyPlayingQueueID = playQueue[index - 1].first
+                        lifecycleScope.launch {
+                            updateCurrentlyPlaying()
+                            if (pbState == STATE_PLAYING) play()
+                        }
+                    }
+                }
+                else -> return 
             }
         }
     }
